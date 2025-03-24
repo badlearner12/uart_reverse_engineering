@@ -1,0 +1,99 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity UART_TOP is
+    port (
+        i_clk       : in  std_logic;
+        i_rst       : in  std_logic;
+        --i_tx_data   : in  std_logic_vector(7 downto 0);
+        i_rx_serial : in  std_logic;
+        o_rx_done   : out std_logic;
+        o_tx_serial : out std_logic
+    );
+end UART_TOP;
+
+architecture Behavioral of UART_TOP is
+    constant CLK_FREQ  : integer := 125_000_000;
+    constant BAUD_RATE : integer := 115200;
+    
+    signal tx_start         : std_logic;
+    signal tx_serial_data   : std_logic;
+    signal tx_data          : std_logic_vector(7 downto 0) := "01100101"; --ASCII CODE 'E'  
+    
+    component UART_TX
+        generic (
+            clk_FREQ  : integer := CLK_FREQ;
+            BAUD_RATE : integer := BAUD_RATE
+        );
+        port (
+            i_clk       : in  std_logic;
+            i_rst       : in  std_logic;
+            i_tx_start  : in  std_logic;
+            i_tx_data   : in  std_logic_vector(7 downto 0);
+            o_tx_serial : out std_logic
+        );
+    end component;
+
+    component UART_RX
+        generic (
+            i_clk_FREQ  : integer := CLK_FREQ;
+            BAUD_RATE   : integer := BAUD_RATE
+        );
+        port (
+            i_clk       : in  std_logic;
+            i_rst       : in  std_logic;
+            i_rx_serial : in  std_logic;
+            o_rx_done   : out std_logic
+        );
+    end component;
+    
+    component trigger
+        port (
+            i_clk       : in  std_logic;
+            i_rst       : in  std_logic;
+            o_trigger   : out std_logic
+        );
+    end component;
+
+begin
+    -- Instantiate UART TX
+    uut_tx: UART_TX
+        generic map (
+            clk_FREQ  => CLK_FREQ,
+            BAUD_RATE => BAUD_RATE
+        )
+        
+        port map (
+            i_clk       => i_clk,
+            i_rst       => i_rst,
+            i_tx_start  => tx_start,
+            i_tx_data   => tx_data,
+            o_tx_serial => tx_serial_data
+        );
+
+    -- Instantiate UART RX
+    uut_rx: UART_RX
+        generic map (
+            i_clk_FREQ  => CLK_FREQ,
+            BAUD_RATE   => BAUD_RATE
+        )
+        
+        port map (
+            i_clk       => i_clk,
+            i_rst       => i_rst,
+            i_rx_serial => i_rx_serial,
+            o_rx_done   => o_rx_done
+        );
+        
+    -- Instantiate trigger
+    uut_trigger: trigger
+        port map (
+            i_clk       => i_clk,
+            i_rst       => i_rst,
+            o_trigger   => tx_start
+        );
+        
+    o_tx_serial <= tx_serial_data ;
+
+end Behavioral;
