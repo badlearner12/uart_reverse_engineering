@@ -1,0 +1,94 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.numeric_std.ALL;
+
+entity TOP_UART is
+    Port ( clk : in STD_LOGIC;
+           reset : in STD_LOGIC;
+           serial_rx : in STD_LOGIC;
+           rx_done_tick : out STD_LOGIC;
+           tx_serial_out : out STD_LOGIC);
+end TOP_UART;
+
+architecture Behavioral of TOP_UART is
+    -- deklarasi sinyal dan beberapa konstanta dan pemanggilan component (fungsi --
+    constant clk_frequency      : integer := 125_000_000;
+    constant baud_rate          : integer := 115_200;
+    
+    signal tx_start             : std_logic;
+    signal tx_serial_data_out   : std_logic;
+    signal tx_data              : std_logic_vector (7 downto 0) := "01100101"; -- ascii K --
+    
+    component uart_tx
+    generic (
+        clk_frequency   : integer := clk_frequency;
+        baud_rate       : integer := baud_rate
+    );
+    port (
+        clk                 : in std_logic  ;
+        reset               : in std_logic  ;
+        tx_start            : in std_logic  ;
+        tx_data             : in std_logic_vector (7 downto 0)  ;
+        tx_serial_out       : out std_logic 
+    );
+    end component;
+    
+    component uart_rx
+    generic (
+        clk_frequency   : integer := clk_frequency;
+        baud_rate       : integer := baud_rate
+    );
+    port (
+        clk                 : in std_logic  ;
+        reset               : in std_logic  ;
+        serial_rx           : in std_logic  ;
+        rx_done_tick        : out std_logic 
+    );
+    end component;
+    
+    component uart_delay_buffer
+    port (
+        clk                 : in std_logic  ;
+        reset               : in std_logic  ;
+        toggle              : out std_logic 
+    );
+    end component ;
+    
+begin
+    --- inisiasi untuk UUT component ---
+    --- component uart tx ---
+    uut_tx : uart_tx
+        generic map (
+            clk_frequency   => clk_frequency ,
+            baud_rate       => baud_rate            
+        )
+        port map (
+            clk                 => clk,
+            reset               => reset,
+            tx_start            => tx_start,
+            tx_data             => tx_data,
+            tx_serial_out       => tx_serial_data_out
+        );          
+
+    uut_rx : uart_rx
+        generic map (
+            clk_frequency   => clk_frequency ,
+            baud_rate       => baud_rate 
+        )
+        port map (
+            clk => clk,
+            reset => reset,
+            serial_rx => tx_serial_data_out,
+            rx_done_tick => rx_done_tick
+        );
+        
+    uut_delay : uart_delay_buffer
+        port map (
+            clk => clk,
+            reset => reset,
+            toggle => tx_start
+        );  
+        
+    tx_serial_out       <= tx_serial_data_out ;
+            
+end Behavioral;
