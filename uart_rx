@@ -1,0 +1,149 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity UART_RX is
+    generic (
+        i_clk_FREQ  : integer := 125_000_000;  -- System clock frequency in Hz
+        BAUD_RATE   : integer := 115200        -- Baud rate
+    );
+    port (
+        i_clk       : in  std_logic;
+        i_rst       : in  std_logic;
+        i_rx_serial : in  std_logic;
+        o_rx_done   : out std_logic := '0'
+    );
+end UART_RX;
+
+architecture Behavioral of UART_RX is
+    constant BAUD16_DIVISOR  : integer := i_clk_FREQ / (BAUD_RATE * 16);
+    type r_state_type is (IDLE, START, DATA, STOP);
+
+    signal r_state       : r_state_type := IDLE;
+    signal r_baud16_cnt  : integer range 0 to BAUD16_DIVISOR-1 := 0;
+    signal r_baud16_tick : std_logic := '0';
+    signal r_sample_cnt  : integer range 0 to 15 := 0;
+    signal r_bit_index   : integer range 0 to 7 := 0;
+    signal r_data_reg    : std_logic_vector(7 downto 0) := (others => '0');
+    signal r_parity_bit  : std_logic := '0';
+    signal r_samples     : std_logic_vector(15 downto 0) := (others => '0');
+
+begin
+
+    -- Baud rate generator
+    p_baud_generator : process(i_clk)
+    begin
+        if rising_edge(i_clk) then
+            if i_rst = '1' or r_state = IDLE then
+                r_baud16_cnt <= 0;
+                r_baud16_tick <= '0';
+            elsif r_baud16_cnt = BAUD16_DIVISOR-1 then
+                r_baud16_cnt <= 0;
+                r_baud16_tick <= '1';
+            else
+                r_baud16_cnt <= r_baud16_cnt + 1;
+                r_baud16_tick <= '0';
+            end if;
+        end if;
+    end process;
+
+    -- UART RX FSM
+    p_fsm : process(i_clk)
+        variable v_count_ones  : integer range 0 to 16;
+        variable v_count_zeros : integer range 0 to 16;
+    begin
+        if rising_edge(i_clk) then
+            if i_rst = '1' then
+                r_state <= IDLE;
+                r_data_reg <= (others => '0');
+                r_sample_cnt <= 0;
+                r_bit_index <= 0;
+                r_samples <= (others => '0');
+            else
+                case r_state is
+                    when IDLE =>
+                        if i_rx_serial = '0' then  -- Detect start bit
+                            r_state <= START;
+                            r_sample_cnt <= 0;
+                            v_count_ones := 0;
+                            v_count_zeros := 0;
+                            o_rx_done <= '0';
+                        end if;
+
+                    when START =>
+                        if r_baud16_tick = '1' then
+                            if i_rx_serial = '1' then
+                                        v_count_ones := v_count_ones + 1;
+                            else
+                                        v_count_zeros := v_count_zeros + 1;
+                            end if;
+                                    
+                            if r_sample_cnt = 15 then
+                                if v_count_zeros > v_count_ones then
+                                    r_state <= DATA;
+                                    r_sample_cnt <= 0;
+                                    r_bit_index <= 0;
+                                    v_count_ones := 0;
+                                    v_count_zeros := 0;
+                                else
+                                    r_state <= IDLE; -- False start
+                                end if;
+                            else
+                                r_sample_cnt <= r_sample_cnt + 1;
+                            end if;
+                        end if;
+
+                    when DATA =>
+                        if r_baud16_tick = '1' then
+                             if i_rx_serial = '1' then
+                                        v_count_ones := v_count_ones + 1;
+                            else
+                                        v_count_zeros := v_count_zeros + 1;
+                            end if;
+                                    
+                            if r_sample_cnt = 15 then
+                                if v_count_ones > v_count_zeros then
+                                    r_data_reg(r_bit_index) <= '1';
+                                else
+                                    r_data_reg(r_bit_index) <= '0';
+                                end if;
+                                r_sample_cnt <= 0;
+                                v_count_ones := 0;
+                                v_count_zeros := 0;
+                                
+                                if r_bit_index = 7 then
+                                    r_state <= STOP;
+                                else
+                                    r_bit_index <= r_bit_index + 1;
+                                end if;
+                            else
+                                r_sample_cnt <= r_sample_cnt + 1;
+                            end if;
+                        end if;
+
+                    when STOP =>
+                        if r_baud16_tick = '1' then
+                            if i_rx_serial = '1' then
+                                        v_count_ones := v_count_ones + 1;
+                            else
+                                        v_count_zeros := v_count_zeros + 1;
+                            end if;
+                            if r_sample_cnt = 15 then
+                                if v_count_ones > v_count_zeros then
+                                    v_count_ones := 0;
+                                    v_count_zeros := 0;
+                                    o_rx_done <='1';
+                                end if;
+                                r_state <= IDLE;
+                            else
+                                r_sample_cnt <= r_sample_cnt + 1;
+                            end if;
+                        end if;
+                end case;
+            end if;
+        end if;
+    end process;
+
+
+
+end Behavioral;
