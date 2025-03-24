@@ -1,0 +1,103 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity UART_TX is
+    generic (
+        clk_FREQ    : integer := 125_000_000;  -- System clock frequency in Hz
+        BAUD_RATE   : integer := 115200        -- Baud rate
+    );
+    port (
+        i_clk       : in  std_logic;
+        i_rst       : in  std_logic;
+        i_tx_start  : in  std_logic;
+        i_tx_data   : in  std_logic_vector(7 downto 0);
+        o_tx_serial : out std_logic
+    );
+end UART_TX;
+
+architecture Behavioral of UART_TX is
+    constant BAUD_DIVISOR : integer := clk_FREQ / BAUD_RATE;
+    type r_state_type is (IDLE, START, DATA, STOP);
+
+    signal r_state     : r_state_type := IDLE;
+    signal r_baud_cnt  : integer range 0 to BAUD_DIVISOR-1 := 0;
+    signal r_baud_tick : std_logic := '0';
+    signal r_bit_index : integer range 0 to 7 := 0;
+    signal r_data_reg  : std_logic_vector(7 downto 0) := (others => '0');
+    signal r_tx_serial : std_logic := '1';
+
+begin
+
+    o_tx_serial <= r_tx_serial;
+
+    -- Baud rate generator
+    p_baud_generator : process(i_clk, i_rst)
+    begin
+        if i_rst = '1' then
+            r_baud_cnt <= 0;
+            r_baud_tick <= '0';
+        elsif rising_edge(i_clk) then
+            if r_state /= IDLE then
+                if r_baud_cnt = BAUD_DIVISOR-1 then
+                    r_baud_cnt <= 0;
+                    r_baud_tick <= '1';
+                else
+                    r_baud_cnt <= r_baud_cnt + 1;
+                    r_baud_tick <= '0';
+                end if;
+            else
+                r_baud_cnt <= 0;
+                r_baud_tick <= '0';
+            end if;
+        end if;
+    end process;
+
+    -- TX FSM
+    p_fsm : process(i_clk, i_rst)
+    begin
+        if i_rst = '1' then
+            r_state <= IDLE;
+            r_tx_serial <= '1';
+            r_data_reg <= (others => '0');
+            r_bit_index <= 0;
+            
+        elsif rising_edge(i_clk) then
+            case r_state is
+                when IDLE =>
+                    r_tx_serial <= '1';
+                    r_bit_index <= 0;  
+                if i_tx_start = '1' then
+                    r_state <= START;
+                    r_data_reg <= i_tx_data;
+                end if;
+
+                
+                when START =>
+                    r_tx_serial <= '0';  -- Start bit
+                    if r_baud_tick = '1' then
+                        r_state <= DATA;
+                        r_bit_index <= 0;
+                    end if;
+                
+                when DATA =>
+                    r_tx_serial <= r_data_reg(r_bit_index);
+                    if r_baud_tick = '1' then
+                        if r_bit_index = 7 then
+                            r_state <= STOP;
+                        else
+                            r_bit_index <= r_bit_index + 1;
+                        end if;
+                    end if;
+                
+                
+                when STOP =>
+                    r_tx_serial <= '1';  -- Stop bit
+                    if r_baud_tick = '1' then
+                        r_state <= IDLE;
+                    end if;
+            end case;
+        end if;
+    end process;
+
+end Behavioral;
