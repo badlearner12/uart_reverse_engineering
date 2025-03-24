@@ -1,0 +1,66 @@
+----------------------------------------------------------------------------------
+-- Company: 
+-- Engineer: 
+-- 
+-- Create Date: 23.03.2025 20:43:31
+-- Design Name: 
+-- Module Name: uart_delay_buffer - Behavioral
+-- Project Name: 
+-- Target Devices: 
+-- Tool Versions: 
+-- Description: 
+-- 
+-- Dependencies: 
+-- 
+-- Revision:
+-- Revision 0.01 - File Created
+-- Additional Comments:
+-- 
+----------------------------------------------------------------------------------
+
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Uncomment the following library declaration if using
+-- arithmetic functions with Signed or Unsigned values
+--use IEEE.NUMERIC_STD.ALL;
+
+-- Uncomment the following library declaration if instantiating
+-- any Xilinx leaf cells in this code.
+--library UNISIM;
+--use UNISIM.VComponents.all;
+
+entity uart_delay_buffer is
+    Port ( clk : in STD_LOGIC;
+           reset : in STD_LOGIC;
+           toggle : out STD_LOGIC);
+end uart_delay_buffer;
+
+architecture Behavioral of uart_delay_buffer is
+    constant clk_frequency : integer := 125_000_000;
+    constant timeout_500ms : integer := clk_frequency / 2; --- 100us timeout --
+    
+    signal counter :integer range 0 to timeout_500ms-1 := 0;
+    signal r_toggle: std_logic := '0';
+     
+begin
+    toggle <= r_toggle ;
+    
+    timer : process(clk, reset)
+    begin
+        if reset = '1' then
+            counter <= 0;
+            r_toggle<= '0';
+        elsif rising_edge(clk) then
+            if counter <= timeout_500ms-1 then
+                counter <= 0;
+                r_toggle <= '1'; -- menghasilkan toggle --
+            else 
+                counter <= counter + 1;
+                r_toggle <= '0';
+            end if;        
+        end if;
+    end process;
+                   
+end Behavioral;
